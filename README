@@ -1,0 +1,7 @@
+This is a translator from TLSF specifications to generalized parity games
+played on graphs (not on automata!).
+
+Dependencies:
+* Syfco
+* Spot's ltl2tgba
+* cpphoafparser (the required sources are included here)
