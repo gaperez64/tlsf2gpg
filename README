@@ -5,3 +5,4 @@ Dependencies:
 * Syfco
 * Spot's ltl2tgba
 * cpphoafparser (the required sources are included here)
+* CUDD 2.5.1 (a compressed copy is enclosed)
