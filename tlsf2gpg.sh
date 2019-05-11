@@ -31,7 +31,7 @@ while read -r line; do
         ${ltl2tgbapath}/ltl2tgba --state-based-acceptance \
             --colored-parity"=max even" \
             --deterministic \
-            -f "$noscolon" > "${tempfolder}/temp-spec${c}.hoa"
+            -f "$noscolon" > "${tempfolder}/temp-spec${c}.hoaf"
         c=$((c+1))
         singletonspec=1
     else

@@ -1,13 +1,14 @@
 //==============================================================================
 //
-//  Copyright (c) 2015-
+//  Copyright (c) 2019-
 //  Authors:
-//  * Joachim Klein <klein@tcs.inf.tu-dresden.de>
-//  * David Mueller <david.mueller@tcs.inf.tu-dresden.de>
+//  * Guillermo A. Perez <guillermoalberto.perez@uantwerpen.be>
+//
+//  Based on the cpphoaf parser by Joachim Klein and David Mueller
 //
 //------------------------------------------------------------------------------
 //
-//  This file is part of the cpphoafparser library,
+//  This file uses the cpphoafparser library,
 //      http://automata.tools/hoa/cpphoafparser/
 //
 //  The cpphoafparser library is free software; you can redistribute it and/or
@@ -26,7 +27,10 @@
 //
 //==============================================================================
 
+#include <algorithm>
 #include <queue>
+#include <list>
+#include <string>
 #include <iostream>
 #include <fstream>
 
@@ -36,168 +40,152 @@
 #include "cpphoafparser/consumer/hoa_intermediate_resolve_aliases.hh"
 #include "cpphoafparser/parser/hoa_parser.hh"
 
-using namespace cpphoafparser;
+/** An enum for the argument sections */
+enum class Section {None, Files, Inputs, Outputs};
 
 /** The version */
-static const char* version = "0.99.2";
+static const char* version = "0.1";
 
-/** Print version to out, verbose? */
-static void printVersion(std::ostream& out, bool verbose) {
-  out << "cpphoafparser library - command line tool (version " << version << ")" << std::endl;
-  out << " (C) Copyright 2015- Joachim Klein, David Mueller" << std::endl;
-  out << " http://automata.tools/hoa/cpphoafparser/" << std::endl;
-  out <<  std::endl;
-
-  if (verbose) {
-    out << "The cpphoafparser library is free software; you can redistribute it and/or" << std::endl;
-    out << "modify it under the terms of the GNU Lesser General Public" << std::endl;
-    out << "License as published by the Free Software Foundation; either" << std::endl;
-    out << "version 2.1 of the License, or (at your option) any later version." << std::endl;
+/** Print version to out */
+static void printVersion(std::ostream& out) {
+    out << "hoafs2gpg v" << version;
+    out << " (C) Copyright 2019- Guillermo A. Perez" << std::endl;
+    out << "Use this tool to translate HOAF files encoding deterministic";
     out << std::endl;
-    out << "The cpphoafparser library is distributed in the hope that it will be useful," << std::endl;
-    out << "but WITHOUT ANY WARRANTY; without even the implied warranty of" << std::endl;
-    out << "MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU" << std::endl;
-    out << "Lesser General Public License for more details." << std::endl;
-  }
+    out << "parity automata into generalized parity games played on graphs.";
+    out << std::endl;
 }
 
 /** Print usage information, and optionally error message */
 static unsigned int usage(const std::string& error = "") {
+    if (error != "") {
+        printVersion(std::cerr);
+        std::cerr << "ERROR: Command-line arguments error: " << error << std::endl;
+        std::cerr << "Use argument '--help' to get usage information." << std::endl;
+        return 2;
+    }
 
-  printVersion(std::cerr, false);
+    printVersion(std::cout);
+    std::cout << "Argument lists are separated by spaces delimited by the following:";
+    std::cout << std::endl;
+    std::cout << " --files    A non-empty list HOAF files with deterministic";
+    std::cout << " parity automata" << std::endl;
+    std::cout << " --inputs   A list of uncontrollable input atomic propositions";
+    std::cout << std::endl;
+    std::cout << " --outputs  A list of controllable output atomic propositions";
+    std::cout << std::endl;
 
-  if (error != "") {
-    std::cerr << "Command-line arguments error: " << error << std::endl;
-    std::cerr << "Use argument 'help' to get usage information." << std::endl;
-    return 2;
-  }
-
-  std::cerr << "Arguments:" << std::endl;
-  std::cerr << "  command [flags]* file" << std::endl << std::endl;
-
-  std::cerr << " Valid commands:" << std::endl;
-  std::cerr << "  parse               Parse the HOAF file and check for errors" << std::endl;
-  std::cerr << "  print               Parse the HOAF file, perform any specified transformations" << std::endl;
-  std::cerr << "                        and print the parsed automata to standard out" << std::endl;
-  std::cerr << "  version             Print the version and exit" << std::endl;
-  std::cerr << "  help                Print this help screen and exit" << std::endl;
-  std::cerr << std::endl;
-  std::cerr << " file can be a filename or - to request reading from standard input" << std::endl;
-  std::cerr << std::endl;
-  std::cerr << " Valid flags:" << std::endl;
-  std::cerr << "  --resolve-aliases           Resolve aliases" << std::endl;
-  std::cerr << "  --no-validate               Do not perform semantic validation" << std::endl;
-  std::cerr << "  --trace                     Debugging: Trace the function calls to HOAConsumer" << std::endl;
-// std::cerr << "  --verbose                        Increase verbosity" << std::endl;
-
-  return (error != "" ? 2 : 0);
+    return (error != "" ? 2 : 0);
 }
 
-
-
 int main(int argc, char* argv[]) {
-  bool verbose = false;
-  bool resolve_aliases = false;
-  bool trace = false;
-  bool validate = true;
+    std::queue<std::string> arguments;
+    for (int i=1; i < argc; i++)
+        arguments.push(argv[i]);
 
-  std::queue<std::string> arguments;
-  for (int i=1; i<argc; i++) {
-    arguments.push(argv[i]);
-  }
+    if (arguments.size() == 0)
+        return usage();
 
-  if (arguments.size() == 0) {
-    return usage();
-  }
-
-  std::string command = arguments.front();
-  arguments.pop();
-  if (command == "help" || command == "--help") {
-    return usage();
-  }
-  if (command == "version") {
-    printVersion(std::cout, true);
-    return 0;
-  }
-
-  while (!arguments.empty()) {
-    const std::string& arg = arguments.front();
-    if (arg.compare(0, 2, "--") == 0) {
-      // is an argument
-      arguments.pop();
-      if (arg == "--resolve-aliases") {
-        resolve_aliases = true;
-      } else if (arg == "--trace") {
-        trace = true;
-      } else if (arg == "--no-validate") {
-        validate = false;
-      } else if (arg == "--") {
-        // end of arguments
-        break;
-      } else {
-        return usage("Unknown argument "+arg);
-      }
+    Section sec = Section::None;
+    std::list<std::string> files;
+    std::list<std::string> inputs;
+    std::list<std::string> outputs;
+    while (!arguments.empty()) {
+        const std::string& arg = arguments.front();
+        arguments.pop();
+        if (arg.compare(0, 2, "--") == 0) {
+            if (arg == "--help") {
+                return usage();
+            } else if (arg == "--version") {
+                printVersion(std::cout);
+                return 0;
+            } else if (arg == "--files") {
+                sec = Section::Files;
+            } else if (arg == "--inputs") {
+                sec = Section::Inputs;
+            } else if (arg == "--outputs") {
+                sec = Section::Outputs;
+            } else {
+                return usage("Unknown argument " + arg);
+            }
+            continue;
+        }
+        // not an argument, are we inside an argument section?
+        switch (sec) {
+            case Section::Files:
+                files.push_back(arg);
+                break;
+            case Section::Inputs:
+                inputs.push_back(arg);
+                break;
+            case Section::Outputs:
+                outputs.push_back(arg);
+                break;
+            default:
+                return usage("Unexpected value " + arg +
+                             " before argument sections");
+        }
     }
-    // not an argument
-    break;
-  }
-
-
-  if (arguments.empty()) {
-    return usage("Missing filename (or - for standard input)");
-  }
-
-  if (arguments.size() > 1) {
-    return usage("More than one filename, currently only supports single file");
-  }
-
-  std::string filename = arguments.front();
-  arguments.pop();
-  std::shared_ptr<std::ifstream> f_in;
-  if (filename != "-") {
-    f_in.reset(new std::ifstream(filename.c_str()));
-    if (!*f_in) {
-      std::cerr << "Error opening file " + filename << std::endl;
-      return 1;
+    if (files.size() == 0 || inputs.size() == 0 || outputs.size() == 0) {
+        return usage("All three argument lists must be non-empty!");
     }
-  }
-  std::istream& in = (filename == "-" ? std::cin : *f_in);
-
-  if (verbose) {
-    std::cerr << "Reading from " + (filename != "-" ? "file "+filename : "standard input") << std::endl;
-  }
-
-  HOAConsumer::ptr consumer;
-  if (command == "print") {
-    consumer.reset(new HOAConsumerPrint(std::cout));
-  } else if (command == "parse") {
-    consumer.reset(new HOAConsumerNull());
-  } else {
-    return usage("Unknown command: "+command);
-  }
-
-  if (resolve_aliases) {
-    consumer.reset(new HOAIntermediateResolveAliases(consumer));
-  }
-
-  if (trace) {
-    consumer.reset(new HOAIntermediateTrace(consumer));
-  }
-
-  try {
-    HOAParser::parse(in, consumer, validate);
-
-    if (command == "parse") {
-      std::cout << "Parsing OK" << std::endl;
-    }
-
-    return 0;
-  } catch (HOAParserException& e) {
-    std::cerr << e.what() << std::endl;
-  } catch (HOAConsumerException& e) {
-    std::cerr << "Exception: " << e.what() << std::endl;
-  }
-  return 1;
+    // Print out some information about the arguments
+    auto print = [](const std::string& s) { std::cout << " " << s; };
+    std::cout << "Files:";
+    std::for_each(files.begin(), files.end(), print);
+    std::cout << std::endl << "Inputs:";
+    std::for_each(inputs.begin(), inputs.end(), print);
+    std::cout << std::endl << "Outputs:";
+    std::for_each(outputs.begin(), outputs.end(), print);
+    std::cout << std::endl;
+//
+//  std::string filename = arguments.front();
+//  arguments.pop();
+//  std::shared_ptr<std::ifstream> f_in;
+//  if (filename != "-") {
+//    f_in.reset(new std::ifstream(filename.c_str()));
+//    if (!*f_in) {
+//      std::cerr << "Error opening file " + filename << std::endl;
+//      return 1;
+//    }
+//  }
+//  std::istream& in = (filename == "-" ? std::cin : *f_in);
+//
+//  if (verbose) {
+//    std::cerr << "Reading from " + (filename != "-" ? "file "+filename : "standard input") << std::endl;
+//  }
+//
+//  HOAConsumer::ptr consumer;
+//  if (command == "print") {
+//    consumer.reset(new HOAConsumerPrint(std::cout));
+//  } else if (command == "parse") {
+//    consumer.reset(new HOAConsumerNull());
+//  } else {
+//    return usage("Unknown command: "+command);
+//  }
+//
+//  if (resolve_aliases) {
+//    consumer.reset(new HOAIntermediateResolveAliases(consumer));
+//  }
+//
+//  if (trace) {
+//    consumer.reset(new HOAIntermediateTrace(consumer));
+//  }
+//
+//  try {
+//    HOAParser::parse(in, consumer, validate);
+//
+//    if (command == "parse") {
+//      std::cout << "Parsing OK" << std::endl;
+//    }
+//
+//    return 0;
+//  } catch (HOAParserException& e) {
+//    std::cerr << e.what() << std::endl;
+//  } catch (HOAConsumerException& e) {
+//    std::cerr << "Exception: " << e.what() << std::endl;
+//  }
+  return 0;
 }
 
 
