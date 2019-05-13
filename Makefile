@@ -20,6 +20,6 @@ hoafs2gpg: $(HEADERS) $(SOURCES) $(CUDD_HDRS) $(CUDD_LIBS) $(CPPHOAFP_HDRS)
 		-I $(CUDD_INCLUDE) \
 		-I $(CPPHOAFP_INCLUDE)
 
-.PHONY: test
-test:
+.PHONY: tests
+tests:
 	./allexamples2gpg.sh
