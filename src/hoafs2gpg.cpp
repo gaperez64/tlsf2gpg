@@ -313,6 +313,7 @@ int main(int argc, char* argv[]) {
     }
     assert(game.isComplete());
     assert(game.isReachable());
+    game.print();
     return 0;
 }
 
