@@ -4,6 +4,11 @@
 #              in an extended version of the PGSolver game format
 # arg1 = the TLSF specification file path
 
+if [ ! -f $1 ]; then
+    echo "Please provide a TLSF file as argument!"
+    return 1
+fi
+
 syfcopath="."
 ltl2tgbapath="."
 tempfolder="./temp"
