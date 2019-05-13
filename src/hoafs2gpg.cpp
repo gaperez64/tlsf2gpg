@@ -42,7 +42,9 @@
 
 #include "cuddObj.hh"
 
+#include "SimpleAutomaton.h"
 #include "SimpleConsumer.h"
+#include "SimpleArena.h"
 
 /** An enum for the argument sections */
 enum class Section {None, Files, Inputs, Outputs};
@@ -138,16 +140,6 @@ int main(int argc, char* argv[]) {
         return usage("All three argument lists must be non-empty!");
     }
 
-    // Print out some information about the arguments
-    auto print = [](const std::string& s) { std::cout << " " << s; };
-    std::cout << "Files:";
-    std::for_each(files.begin(), files.end(), print);
-    std::cout << std::endl << "Inputs:";
-    std::for_each(inputs.begin(), inputs.end(), print);
-    std::cout << std::endl << "Outputs:";
-    std::for_each(outputs.begin(), outputs.end(), print);
-    std::cout << std::endl;
-
     // Read all files into the automaton data structure
     Cudd mgr(0, 0);
     mgr.AutodynEnable(CUDD_REORDER_SIFT);
@@ -182,35 +174,25 @@ int main(int argc, char* argv[]) {
         product_start.push_back(pa->start);
     to_visit.push(product_start);
 
-    // Print out some information about the initial state
-    auto print_int_vec = [](const unsigned int& i) { std::cout << " " << i; };
-    std::cout << "Initial state in the product:";
-    std::for_each(product_start.begin(), product_start.end(), print_int_vec);
-    std::cout << std::endl;
-
     // Start creating the product automaton
     SimpleAutomaton product;
     std::map<std::vector<unsigned int>, unsigned int> prod_indexes;
+    prod_indexes[product_start] = 0;
     product.start = 0;
+    /* Invariant: every element in to_visit has an entry in prod_indexes,
+     * and its corresponding priorities and successors are not yet there
+     */
     while (to_visit.size() > 0) {
         std::vector<unsigned int> state = to_visit.front();
         to_visit.pop();
 
-        // some information about the current state
-        std::cout << "visiting state in the product:";
-        std::for_each(state.begin(), state.end(), print_int_vec);
-        std::cout << std::endl;
-
-        // we give the state a new name in the product
-        int state_index = product.priorities.size();
-        prod_indexes[product_start] = state_index;
         // create a list of successors and a list of priorities
         product.priorities.push_back({});
         product.successors.push_back({});
 
         // we load all priorities of the state
         for (int i = 0; i < state.size(); i++)
-            product.priorities[state_index].push_back(
+            product.priorities[prod_indexes[state]].push_back(
                 parity_automata[i].priorities[state[i]].front());
         
         // we now explore all transitions in the product
@@ -223,22 +205,17 @@ int main(int argc, char* argv[]) {
             for (int i = 0; i < state.size(); i++)
                 prod_label &= indices[i]->first;
             if (prod_label != mgr.bddZero()) {
-                // we create the successor, check if it is in the index map
+                // create the successor, check if it is in the index map, 
                 // add the transition, and add it to the queue (if not in map)
                 std::vector<unsigned int> succ;
                 for (int i = 0; i < state.size(); i++)
                     succ.push_back(indices[i]->second);
-                product.successors[state_index].push_back(
-                    std::make_pair(prod_label, prod_indexes.size()));
-                auto is_in = prod_indexes.find(succ);
-                if (is_in == prod_indexes.end()) {
+                if (prod_indexes.find(succ) == prod_indexes.end()) {
                     to_visit.push(succ);
                     prod_indexes[succ] = prod_indexes.size();
                 }
-                // some information about the successor state
-                std::cout << "    found a successor:";
-                std::for_each(succ.begin(), succ.end(), print_int_vec);
-                std::cout << std::endl;
+                product.successors[prod_indexes[state]].push_back(
+                    std::make_pair(prod_label, prod_indexes[succ]));
             }
             // increase the indices in a "binary counter" fashion
             for (int i = state.size() - 1; i >= 0; i--) {
@@ -251,14 +228,18 @@ int main(int argc, char* argv[]) {
             }
         }
     }
+    assert(product.isComplete());
 
     // Start creating the generalized parity game
     // Step 1. generate all valuations of inputs
     std::list<BDD> input_vals;
+
     // we step through input valuations in a "binary counter" fashion
+    // so we need a counter to remember the current valuation
     bool val[inputs.size()];
     for (int i = 0; i < inputs.size(); i++)
         val[i] = false;
+        
     bool done = false;
     while (!done) {
         BDD valBDD = mgr.bddOne();
@@ -283,50 +264,55 @@ int main(int argc, char* argv[]) {
             }
         }
     }
+
     // Step 2. for all states in the product and all valuations, create
     // vertices of both players
-    unsigned int nindex;
+    unsigned int nindex = 0;
     std::map<unsigned int, unsigned int> state2vertex;
     SimpleArena game;
-    for (unsigned int state = 0; state <= product.numStates(); state++) {
+    for (unsigned int state = 0; state < product.numStates(); state++) {
         if (state2vertex.find(state) == state2vertex.end()) {
             state2vertex[state] = nindex++;
             game.protagonist_vertex.push_back(true);
             game.successors.push_back({});
             game.priorities.push_back(product.priorities[state]);
         }
+        // we step through all input valuations now
         for (auto val = input_vals.begin(); val != input_vals.end(); val++) {
-            nature_vertex = nindex++;
+            unsigned int nature_vertex = nindex++;
             game.protagonist_vertex.push_back(false);
             game.successors.push_back({});
+            // the priorities of the new vertex are copied from the 
+            // protagonist vertex
             game.priorities.push_back(product.priorities[state]);
             // connect from state to here
-            game.successors[state].push_back(nindex++);
+            game.successors[state2vertex[state]].push_back(nature_vertex);
             // connect from here to all successors of state whose transition
             // BDD is compatible with the valuation
+            bool atleastone = false;
             for (auto succ = product.successors[state].begin();
-                      succ != product.successors[state].end(); succ++) {
+                      succ != product.successors[state].end();
+                      succ++) {
                 // ignore this if the transition is not compatible
-                if (succ->first & *val == mgr.bddZero())
+                if ((succ->first & *val) == mgr.bddZero())
                     continue;
                 // otherwise recover info on the successor
-                unsigned next_state;
-                auto search = state2vertex.find(*succ);
-                if (search == state2vertex.end()) {
-                    next_state = nindex++;
-                    state2vertex[*succ] = next_state;
+                atleastone = true;
+                unsigned int next_state = succ->second;
+                if (state2vertex.find(next_state) == state2vertex.end()) {
+                    state2vertex[next_state] = nindex++;
                     game.protagonist_vertex.push_back(true);
                     game.successors.push_back({});
-                    game.priorities.push_back(product.priorities[*succ]);
-                } else {
-                    next_state = search->second;
+                    game.priorities.push_back(product.priorities[next_state]);
                 }
                 // connect from the intermediate vertex to next state
-                // TODO
-
+                game.successors[nature_vertex].push_back(state2vertex[next_state]);
             }
+            assert(atleastone);
         }
     }
+    assert(game.isComplete());
+    assert(game.isReachable());
     return 0;
 }
 

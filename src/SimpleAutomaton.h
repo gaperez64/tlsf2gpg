@@ -44,6 +44,7 @@ public:
         assert(priorities.size() == successors.size());
         return priorities.size();
     }
+    bool isComplete();
 };
 
 #endif

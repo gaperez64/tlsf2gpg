@@ -27,27 +27,11 @@
 //
 //==============================================================================
 
-#ifndef TLSF2GPG_SIMPLEARENA
-#define TLSF2GPG_SIMPLEARENA
+#include "SimpleAutomaton.h"
 
-#include <list>
-#include <vector>
-
-#include "cuddObj.hh"
-
-class SimpleArena {
-public:
-    std::vector<bool> protagonist_vertex;
-    std::vector<std::list<unsigned int> > priorities;
-    std::vector<std::list<unsigned int> > successors;
-    unsigned int numVertices() {
-        assert(priorities.size() == successors.size() &&
-               priorities.size() == protagonist_vertex.size());
-        return priorities.size();
-    }
-    bool isReachable();
-    bool isComplete();
-    void print();
-};
-
-#endif
+bool SimpleAutomaton::isComplete() {
+    for (auto succ = successors.begin(); succ != successors.end(); succ++)
+        if (succ->size() == 0)
+            return false;
+    return true;
+}

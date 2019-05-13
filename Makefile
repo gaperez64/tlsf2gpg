@@ -1,7 +1,8 @@
 CXX=g++
 CXXFLAGS=-std=c++11 -O3
 HEADERS=src/SimpleAutomaton.h src/SimpleConsumer.h src/SimpleArena.h
-SOURCES=src/SimpleConsumer.cpp src/hoafs2gpg.cpp
+SOURCES=src/SimpleConsumer.cpp src/hoafs2gpg.cpp \
+	src/SimpleArena.cpp src/SimpleAutomaton.cpp
 CUDD_PATH=cudd-2.5.1
 CUDD_INCLUDE=$(CUDD_PATH)/include
 CUDD_HDRS=$(CUDD_INCLUDE)/*.h
