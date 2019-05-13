@@ -40,6 +40,10 @@
 #include "cpphoafparser/consumer/hoa_intermediate_resolve_aliases.hh"
 #include "cpphoafparser/parser/hoa_parser.hh"
 
+#include "cuddObj.hh"
+
+#include "SimpleConsumer.h"
+
 /** An enum for the argument sections */
 enum class Section {None, Files, Inputs, Outputs};
 
@@ -88,8 +92,10 @@ int main(int argc, char* argv[]) {
 
     Section sec = Section::None;
     std::list<std::string> files;
-    std::list<std::string> inputs;
+    std::vector<std::string> inputs;
     std::list<std::string> outputs;
+    unsigned int sindex = 0;
+    std::map<std::string, unsigned int> signal_table;
     while (!arguments.empty()) {
         const std::string& arg = arguments.front();
         arguments.pop();
@@ -117,9 +123,11 @@ int main(int argc, char* argv[]) {
                 break;
             case Section::Inputs:
                 inputs.push_back(arg);
+                signal_table[arg] = sindex++;
                 break;
             case Section::Outputs:
                 outputs.push_back(arg);
+                signal_table[arg] = sindex++;
                 break;
             default:
                 return usage("Unexpected value " + arg +
@@ -129,6 +137,7 @@ int main(int argc, char* argv[]) {
     if (files.size() == 0 || inputs.size() == 0 || outputs.size() == 0) {
         return usage("All three argument lists must be non-empty!");
     }
+
     // Print out some information about the arguments
     auto print = [](const std::string& s) { std::cout << " " << s; };
     std::cout << "Files:";
@@ -138,54 +147,187 @@ int main(int argc, char* argv[]) {
     std::cout << std::endl << "Outputs:";
     std::for_each(outputs.begin(), outputs.end(), print);
     std::cout << std::endl;
-//
-//  std::string filename = arguments.front();
-//  arguments.pop();
-//  std::shared_ptr<std::ifstream> f_in;
-//  if (filename != "-") {
-//    f_in.reset(new std::ifstream(filename.c_str()));
-//    if (!*f_in) {
-//      std::cerr << "Error opening file " + filename << std::endl;
-//      return 1;
-//    }
-//  }
-//  std::istream& in = (filename == "-" ? std::cin : *f_in);
-//
-//  if (verbose) {
-//    std::cerr << "Reading from " + (filename != "-" ? "file "+filename : "standard input") << std::endl;
-//  }
-//
-//  HOAConsumer::ptr consumer;
-//  if (command == "print") {
-//    consumer.reset(new HOAConsumerPrint(std::cout));
-//  } else if (command == "parse") {
-//    consumer.reset(new HOAConsumerNull());
-//  } else {
-//    return usage("Unknown command: "+command);
-//  }
-//
-//  if (resolve_aliases) {
-//    consumer.reset(new HOAIntermediateResolveAliases(consumer));
-//  }
-//
-//  if (trace) {
-//    consumer.reset(new HOAIntermediateTrace(consumer));
-//  }
-//
-//  try {
-//    HOAParser::parse(in, consumer, validate);
-//
-//    if (command == "parse") {
-//      std::cout << "Parsing OK" << std::endl;
-//    }
-//
-//    return 0;
-//  } catch (HOAParserException& e) {
-//    std::cerr << e.what() << std::endl;
-//  } catch (HOAConsumerException& e) {
-//    std::cerr << "Exception: " << e.what() << std::endl;
-//  }
-  return 0;
+
+    // Read all files into the automaton data structure
+    Cudd mgr(0, 0);
+    mgr.AutodynEnable(CUDD_REORDER_SIFT);
+    std::vector<SimpleAutomaton> parity_automata;
+    for (auto hoafauto = files.begin(); hoafauto != files.end(); hoafauto++) {
+        std::shared_ptr<std::ifstream> in;
+        in.reset(new std::ifstream(hoafauto->c_str()));
+        if (!*in) {
+            std::cerr << "Error opening file " + *hoafauto << std::endl;
+            return 1;
+        }
+
+        cpphoafparser::HOAConsumer::ptr consumer;
+        SimpleAutomaton a;
+        consumer.reset(new SimpleConsumer(mgr, signal_table, a));
+
+        try {
+            cpphoafparser::HOAParser::parse(*in, consumer, true);
+        } catch (cpphoafparser::HOAParserException& e) {
+            std::cerr << e.what() << std::endl;
+        } catch (cpphoafparser::HOAConsumerException& e) {
+            std::cerr << "Exception: " << e.what() << std::endl;
+        }
+
+        parity_automata.push_back(a);
+    }
+
+    // Create a product automaton by exploring the product
+    std::queue<std::vector<unsigned int> > to_visit;
+    std::vector<unsigned int> product_start;
+    for (auto pa = parity_automata.begin(); pa != parity_automata.end(); pa++)
+        product_start.push_back(pa->start);
+    to_visit.push(product_start);
+
+    // Print out some information about the initial state
+    auto print_int_vec = [](const unsigned int& i) { std::cout << " " << i; };
+    std::cout << "Initial state in the product:";
+    std::for_each(product_start.begin(), product_start.end(), print_int_vec);
+    std::cout << std::endl;
+
+    // Start creating the product automaton
+    SimpleAutomaton product;
+    std::map<std::vector<unsigned int>, unsigned int> prod_indexes;
+    product.start = 0;
+    while (to_visit.size() > 0) {
+        std::vector<unsigned int> state = to_visit.front();
+        to_visit.pop();
+
+        // some information about the current state
+        std::cout << "visiting state in the product:";
+        std::for_each(state.begin(), state.end(), print_int_vec);
+        std::cout << std::endl;
+
+        // we give the state a new name in the product
+        int state_index = product.priorities.size();
+        prod_indexes[product_start] = state_index;
+        // create a list of successors and a list of priorities
+        product.priorities.push_back({});
+        product.successors.push_back({});
+
+        // we load all priorities of the state
+        for (int i = 0; i < state.size(); i++)
+            product.priorities[state_index].push_back(
+                parity_automata[i].priorities[state[i]].front());
+        
+        // we now explore all transitions in the product
+        std::list<std::pair<BDD, unsigned int> >::iterator indices[state.size()];
+        for (int i = 0; i < state.size(); i++)
+            indices[i] = parity_automata[i].successors[state[i]].begin();
+        while (indices[0] != parity_automata[0].successors[state[0]].end()) {
+            // process the new transition if the BDDs allow it
+            BDD prod_label = mgr.bddOne();
+            for (int i = 0; i < state.size(); i++)
+                prod_label &= indices[i]->first;
+            if (prod_label != mgr.bddZero()) {
+                // we create the successor, check if it is in the index map
+                // add the transition, and add it to the queue (if not in map)
+                std::vector<unsigned int> succ;
+                for (int i = 0; i < state.size(); i++)
+                    succ.push_back(indices[i]->second);
+                product.successors[state_index].push_back(
+                    std::make_pair(prod_label, prod_indexes.size()));
+                auto is_in = prod_indexes.find(succ);
+                if (is_in == prod_indexes.end()) {
+                    to_visit.push(succ);
+                    prod_indexes[succ] = prod_indexes.size();
+                }
+                // some information about the successor state
+                std::cout << "    found a successor:";
+                std::for_each(succ.begin(), succ.end(), print_int_vec);
+                std::cout << std::endl;
+            }
+            // increase the indices in a "binary counter" fashion
+            for (int i = state.size() - 1; i >= 0; i--) {
+                indices[i]++;
+                if (indices[i] != parity_automata[i].successors[state[i]].end()) {
+                    break;
+                } else if (i > 0) {  // the first digit is never reset
+                    indices[i] = parity_automata[i].successors[state[i]].begin();
+                }
+            }
+        }
+    }
+
+    // Start creating the generalized parity game
+    // Step 1. generate all valuations of inputs
+    std::list<BDD> input_vals;
+    // we step through input valuations in a "binary counter" fashion
+    bool val[inputs.size()];
+    for (int i = 0; i < inputs.size(); i++)
+        val[i] = false;
+    bool done = false;
+    while (!done) {
+        BDD valBDD = mgr.bddOne();
+        for (int i = 0; i < inputs.size(); i++) {
+            BDD varBDD = mgr.bddVar(signal_table[inputs[i]]);
+            if (!val[i])
+                varBDD = ~varBDD;
+            valBDD &= varBDD;
+        }
+        input_vals.push_back(valBDD);
+        // increase the counter
+        for (int i = inputs.size() - 1; i >= 0; i--) {
+            if (!val[i]) {
+                val[i] = true;
+                break;
+            } else if (i > 0) { // the first digit is never reset
+                val[i] = false;
+                // and do not break, we need to do carries
+            } else {
+                done = true;
+                break;
+            }
+        }
+    }
+    // Step 2. for all states in the product and all valuations, create
+    // vertices of both players
+    unsigned int nindex;
+    std::map<unsigned int, unsigned int> state2vertex;
+    SimpleArena game;
+    for (unsigned int state = 0; state <= product.numStates(); state++) {
+        if (state2vertex.find(state) == state2vertex.end()) {
+            state2vertex[state] = nindex++;
+            game.protagonist_vertex.push_back(true);
+            game.successors.push_back({});
+            game.priorities.push_back(product.priorities[state]);
+        }
+        for (auto val = input_vals.begin(); val != input_vals.end(); val++) {
+            nature_vertex = nindex++;
+            game.protagonist_vertex.push_back(false);
+            game.successors.push_back({});
+            game.priorities.push_back(product.priorities[state]);
+            // connect from state to here
+            game.successors[state].push_back(nindex++);
+            // connect from here to all successors of state whose transition
+            // BDD is compatible with the valuation
+            for (auto succ = product.successors[state].begin();
+                      succ != product.successors[state].end(); succ++) {
+                // ignore this if the transition is not compatible
+                if (succ->first & *val == mgr.bddZero())
+                    continue;
+                // otherwise recover info on the successor
+                unsigned next_state;
+                auto search = state2vertex.find(*succ);
+                if (search == state2vertex.end()) {
+                    next_state = nindex++;
+                    state2vertex[*succ] = next_state;
+                    game.protagonist_vertex.push_back(true);
+                    game.successors.push_back({});
+                    game.priorities.push_back(product.priorities[*succ]);
+                } else {
+                    next_state = search->second;
+                }
+                // connect from the intermediate vertex to next state
+                // TODO
+
+            }
+        }
+    }
+    return 0;
 }
 
 

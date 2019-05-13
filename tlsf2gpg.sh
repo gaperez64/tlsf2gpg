@@ -9,32 +9,25 @@ ltl2tgbapath="."
 tempfolder="./temp"
 
 echo "Generating a generalized parity game for the TLSF file $1"
-inputs=$(${syfcopath}/syfco $1 --print-input-signals)
-outputs=$(${syfcopath}/syfco $1 --print-output-signals)
+inputs=$(${syfcopath}/syfco $1 --print-input-signals | sed "s/,//g")
+outputs=$(${syfcopath}/syfco $1 --print-output-signals | sed "s/,//g")
 echo "(Uncontrollable) inputs: ${inputs}"
 echo "Outputs: ${outputs}"
-specs=$(${syfcopath}/syfco $1 --format acacia-specs)
-c=1
-singletonspec=0
+specs=$(${syfcopath}/syfco $1 --format ltlxba-decomp)
+c=0
 while read -r line; do
-    if [[ ! "$line" = "[spec_unit"* ]]; then
-        if [ "$singletonspec" -eq "1" ]; then
-            echo "There is more there one line per spec!"
-            exit
-        fi
-        noscolon=$(echo "$line" | sed "s/;*$//g")
-        echo "Working on a parity automaton for the (Wring format) LTL"
-        echo "$noscolon"
-        # state-based-acceptance is self-explanatory
-        # colored-parity (-p) makes every state be in exactly one acceptance set
-        # deterministic is self-explanatory
-        ${ltl2tgbapath}/ltl2tgba --state-based-acceptance \
-            --colored-parity"=max even" \
-            --deterministic \
-            -f "$noscolon" > "${tempfolder}/temp-spec${c}.hoaf"
-        c=$((c+1))
-        singletonspec=1
-    else
-        singletonspec=0
-    fi
+    c=$((c+1))
+    echo "Working on a parity automaton for the LTL formula"
+    echo "$line"
+    # state-based-acceptance is self-explanatory
+    # colored-parity makes every state be in exactly one acceptance set
+    # deterministic is self-explanatory
+    ${ltl2tgbapath}/ltl2tgba --state-based-acceptance \
+        --colored-parity"=max even" \
+        --deterministic \
+        -f "$line" > "${tempfolder}/temp-spec${c}.hoaf"
 done <<< "$specs"
+hoafrange=$(seq 1 ${c})
+allhoafs=$(printf "${tempfolder}/temp-spec%i.hoaf " ${hoafrange})
+echo "Calling hoafs2gpg to read the parity automata and create the game"
+./hoafs2gpg --files ${allhoafs} --inputs ${inputs} --outputs ${outputs}
