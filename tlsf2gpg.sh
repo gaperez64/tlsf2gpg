@@ -13,8 +13,14 @@ syfcopath="."
 ltl2tgbapath="."
 tempfolder="./temp"
 
-inputs=$(${syfcopath}/syfco $1 --print-input-signals | sed "s/,//g")
-outputs=$(${syfcopath}/syfco $1 --print-output-signals | sed "s/,//g")
+# syfco will change propositions to lower case when using
+# the ltlxba format, so we do the same here
+inputs=$(${syfcopath}/syfco $1 --print-input-signals \
+         | sed "s/,//g" \
+         | tr "[:upper:]" "[:lower:]")
+outputs=$(${syfcopath}/syfco $1 --print-output-signals \
+          | sed "s/,//g" \
+          | tr "[:upper:]" "[:lower:]")
 specs=$(${syfcopath}/syfco $1 --format ltlxba-decomp)
 c=0
 while read -r line; do
