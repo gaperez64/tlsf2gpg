@@ -23,3 +23,4 @@ hoafs2gpg: $(HEADERS) $(SOURCES) $(CUDD_HDRS) $(CUDD_LIBS) $(CPPHOAFP_HDRS)
 .PHONY: tests
 tests:
 	./allexamples2gpg.sh
+	./allexamples2pg.sh
