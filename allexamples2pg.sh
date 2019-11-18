@@ -2,5 +2,5 @@
 TOUT=gtimeout
 
 for filename in ./examples/*.tlsf; do
-    ${TOUT} -k 60 40 ./tlsf2pg.sh "$filename" > "${filename}.pg"
+    ${TOUT} -k 600 540 ./tlsf2pg.sh "$filename" > "${filename}.pg"
 done

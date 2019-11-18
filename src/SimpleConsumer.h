@@ -42,7 +42,7 @@
 
 class SimpleConsumer : public cpphoafparser::HOAConsumer {
 private:
-    const Cudd& mgr;
+    Cudd& mgr;
     const std::map<std::string, unsigned int>& global_signals;
     SimpleAutomaton& automaton;
     std::vector<unsigned int> signals;
