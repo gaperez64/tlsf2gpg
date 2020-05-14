@@ -33,4 +33,4 @@ ${ltl2tgbapath}/ltl2tgba \
 # so we start by recovering the list of APs in the hoa file
 allAPs=$(sed -n "s/^AP: [0-9]* \(.*\)$/\1/p" "$1.ehoa" | sed "s/\"//g")
 outputIndices=$(python getindices.py "${outputs}" "${allAPs}")
-sed -i "s/^\(AP:.*\)$/\1\ncontrollable-APs: ${outputIndices}/g" "$1.ehoa"
+sed -i "s/^\(AP:.*\)$/\1\ncontrollable-AP: ${outputIndices}/g" "$1.ehoa"
