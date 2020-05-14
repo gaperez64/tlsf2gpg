@@ -28,8 +28,9 @@ ${ltl2tgbapath}/ltl2tgba \
     --colored-parity"=max even" \
     --deterministic \
     --complete \
-    -f "$spec" > "$1.hoaf"
+    -f "$spec" > "$1.ehoa"
 # we now have to mark the controllable APs, using their indices,
 # so we start by recovering the list of APs in the hoa file
-${allAPs}=$(sed -n "s/^AP: [0-9]* \(.*\)$/\1/p" "$1.hoaf")
-echo ${allAPs}
+allAPs=$(sed -n "s/^AP: [0-9]* \(.*\)$/\1/p" "$1.ehoa" | sed "s/\"//g")
+outputIndices=$(python getindices.py "${outputs}" "${allAPs}")
+sed -i "s/^\(AP:.*\)$/\1\ncontrollable-APs: ${outputIndices}/g" "$1.ehoa"
