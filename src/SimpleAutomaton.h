@@ -32,6 +32,7 @@
 
 #include <list>
 #include <vector>
+#include <cassert>
 
 #include "cuddObj.hh"
 

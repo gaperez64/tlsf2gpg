@@ -30,6 +30,7 @@
 #include <iostream>
 #include <queue>
 #include <algorithm>
+#include <cassert>
 
 #include "SimpleArena.h"
 

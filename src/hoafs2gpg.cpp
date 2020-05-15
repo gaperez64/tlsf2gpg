@@ -99,7 +99,7 @@ int main(int argc, char* argv[]) {
     unsigned int sindex = 0;
     std::map<std::string, unsigned int> signal_table;
     while (!arguments.empty()) {
-        const std::string& arg = arguments.front();
+        std::string arg(arguments.front());
         arguments.pop();
         if (arg.compare(0, 2, "--") == 0) {
             if (arg == "--help") {
