@@ -21,7 +21,7 @@ inputs=$(${syfcopath}/syfco $1 --print-input-signals \
 outputs=$(${syfcopath}/syfco $1 --print-output-signals \
           | sed "s/,//g" \
           | tr "[:upper:]" "[:lower:]")
-specs=$(${syfcopath}/syfco $1 --format ltlxba-decomp)
+specs=$(${syfcopath}/syfco $1 --format ltlxba-decomp --mode fully)
 c=0
 while read -r line; do
     c=$((c+1))

@@ -273,14 +273,14 @@ int main(int argc, char* argv[]) {
     for (unsigned int state = 0; state < product.numStates(); state++) {
         if (state2vertex.find(state) == state2vertex.end()) {
             state2vertex[state] = nindex++;
-            game.protagonist_vertex.push_back(true);
+            game.protagonist_vertex.push_back(false);
             game.successors.push_back({});
             game.priorities.push_back(product.priorities[state]);
         }
         // we step through all input valuations now
         for (auto val = input_vals.begin(); val != input_vals.end(); val++) {
             unsigned int nature_vertex = nindex++;
-            game.protagonist_vertex.push_back(false);
+            game.protagonist_vertex.push_back(true);
             game.successors.push_back({});
             // the priorities of the new vertex are copied from the 
             // protagonist vertex
@@ -301,7 +301,7 @@ int main(int argc, char* argv[]) {
                 unsigned int next_state = succ->second;
                 if (state2vertex.find(next_state) == state2vertex.end()) {
                     state2vertex[next_state] = nindex++;
-                    game.protagonist_vertex.push_back(true);
+                    game.protagonist_vertex.push_back(false);
                     game.successors.push_back({});
                     game.priorities.push_back(product.priorities[next_state]);
                 }

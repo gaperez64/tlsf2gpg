@@ -20,7 +20,7 @@ inputs=$(${syfcopath}/syfco $1 --print-input-signals \
 outputs=$(${syfcopath}/syfco $1 --print-output-signals \
           | sed "s/,//g" \
           | tr "[:upper:]" "[:lower:]")
-spec=$(${syfcopath}/syfco $1 --format ltlxba)
+spec=$(${syfcopath}/syfco $1 --format ltlxba --mode fully)
 # colored-parity makes every state be in exactly one acceptance set
 # deterministic is self-explanatory
 # complete is self-explanatory
