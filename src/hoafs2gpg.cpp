@@ -1,6 +1,6 @@
 //==============================================================================
 //
-//  Copyright (c) 2019-
+//  Copyright (c) 2019-2021
 //  Authors:
 //  * Guillermo A. Perez <guillermoalberto.perez@uantwerpen.be>
 //
@@ -136,8 +136,8 @@ int main(int argc, char* argv[]) {
                              " before argument sections");
         }
     }
-    if (files.size() == 0 || inputs.size() == 0 || outputs.size() == 0) {
-        return usage("All three argument lists must be non-empty!");
+    if (files.size() == 0 || inputs.size() + outputs.size() == 0) {
+        return usage("The number of files and inputs + outputs must be nonzero!");
     }
 
     // Read all files into the automaton data structure
